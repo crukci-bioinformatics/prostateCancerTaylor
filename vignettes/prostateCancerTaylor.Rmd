@@ -42,6 +42,9 @@ anno <- anno[!is.na(anno$Entrez),]
 fData(geoData) <- data.frame(anno, Gene=unlist(mget(as.character(anno$Entrez), org.Hs.egSYMBOL,ifnotfound=NA)))
 ```
 
+
+We tidy up the data from GEO; creating a new data frame of just the clinical characteristics of interest.
+
 ```{r}
 
 pd <- pData(geoData)
@@ -50,7 +53,11 @@ pd2 <- data.frame("geo_accession" = pd$geo_accession, Sample = gsub("sample id: 
 
 rownames(pd2) <- pd2$geo_accession
 
-            
+```
+
+Extra information, particulary that relating to survival, can be found in the supplmentary table for the paper. For convenience, we save this table as a csv file in the package.
+
+```{r}
          
 fpath <- system.file("extdata", "STable1.csv",package="prostateCancerTaylor")
 extraClin <- read.csv(fpath)
