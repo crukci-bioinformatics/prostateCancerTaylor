@@ -25,6 +25,6 @@ dplyrConvert <- function(){
     varProbes <- taylor %>% group_by(Gene) %>% 
     summarise(Probe = Probe[which.max(IQR)])
   
-  taylor <- inner_join(taylor, varProbes,by="Probe")
+  taylor <- inner_join(taylor, varProbes,by="Probe") %>% rename(Gene = Gene.x) %>% select(-c(Gene.y))
   
 }
