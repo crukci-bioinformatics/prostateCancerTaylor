@@ -8,8 +8,10 @@ dplyrConvert <- function(){
   
   zscore <- function(x) t(scale(t(x)))
   
-  taylor <- tbl_df(data.frame(Probe=featureNames(geoData),zscore(exprs(geoData)))) %>%
-    gather(geo_accession,Expression,- Probe)
+  iqrs <- apply(log2(exprs(geoData)), 1, IQR,na.rm=TRUE)
+  
+  taylor <- tbl_df(data.frame(Probe=featureNames(geoData),IQR=iqrs,zscore(exprs(geoData)))) %>%
+    gather(geo_accession,Expression,- c(Probe,IQR))
   
   fd <- tbl_df(fData(geoData)) %>% rename(Probe = ID)
   
