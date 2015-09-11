@@ -19,5 +19,12 @@ dplyrConvert <- function(){
   
 
   taylor <- taylor %>% full_join(pd) %>% full_join(fd)
-  taylor
+
+  ##selecting most variable probe for each gene
+
+    varProbes <- taylor %>% group_by(Gene) %>% 
+    summarise(Probe = Probe[which.max(IQR)])
+  
+  taylor <- inner_join(taylor, varProbes,by="Probe")
+  
 }
