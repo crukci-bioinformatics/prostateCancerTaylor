@@ -4,6 +4,7 @@ dplyrConvert <- function(){
   data(taylor,package = "prostateCancerTaylor")
   library(tidyr)
   library(dplyr)
+  library(Biobase)
   geoData <- taylor
   
   zscore <- function(x) t(scale(t(x)))
