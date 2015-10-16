@@ -1,0 +1,124 @@
+Exploring the prostate cancer dataset using the Taylor dataset
+========================================================
+
+
+```{r}
+suppressPackageStartupMessages(library(GEOquery))
+
+```
+Download the copy-number data from GEO
+
+```{r eval=F}
+url <- "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21035/matrix/"
+destfile <-"GSE21035_series_matrix.txt.gz"
+
+if(!file.exists(destfile)){
+download.file(paste(url,destfile,sep=""),destfile=destfile)
+}
+
+cndata <- getGEO(filename=destfile)
+save(cndata, file="cndata.rda")
+```
+
+
+```{r}
+load("cndata.rda")
+cndata
+```
+
+We using the C.B.S algorithm, as implemented in the DNAcopy package to segment the data. We restrict to chromosome 1 to 22, X and Y. RAE used downstream seems to expect numeric chromosome names.
+
+```{r}
+cndata <- cndata[fData(cndata)$CONTROL_TYPE == "FALSE",]
+locs <- strsplit(as.character(fData(cndata)$CHROMOSOMAL_LOCATION),":")
+chr <- unlist(lapply(locs, function(x) x[1]))
+location <- unlist(lapply(locs, function(x) strsplit(x[2], "-", fixed=T)[[1]][1]))
+validChr <- chr %in% paste("chr", c(1:22,"X","Y"),sep="")
+cndata <- cndata[validChr]
+
+
+library(DNAcopy)
+
+CNA.object <- CNA(cbind(exprs(cndata)),chr[validChr],as.numeric(location[validChr]),data.type="logratio",sampleid = gsub("tissue: ", "", pData(cndata)$characteristics_ch1))
+CNA.object[,1] <- gsub("chr", "", CNA.object[,1])
+CNA.object[,1] <- gsub("X", 23, CNA.object[,1])
+CNA.object[,1] <- gsub("Y", 24, CNA.object[,1])
+CNA.object[,1] <- as.numeric(CNA.object[,1])
+
+CNA.object
+
+
+smoothed.CNA.object <- smooth.CNA(CNA.object)
+
+if(!file.exists("segment.smoothed.CNA.object.rda")){
+  
+segment.smoothed.CNA.object <- segment(smoothed.CNA.object, verbose=1)
+segment.smoothed.CNA.object$output[,1] <- gsub("sample.id..","",segment.smoothed.CNA.object$output[,1])
+
+
+save(segment.smoothed.CNA.object, file="segment.smoothed.CNA.object.rda")
+
+} else load("segment.smoothed.CNA.object.rda")
+
+write.table(segment.smoothed.CNA.object$output, file="taylor.seg",sep="\t",quote=F,row.names=F)
+
+```
+
+Split samples as input for RAE
+
+```{r}
+samps <- unique(segment.smoothed.CNA.object$output[,1])
+
+for(i in 1:length(samps)){
+  smpl <- samps[i]
+  data <- segment.smoothed.CNA.object$data
+  output <- segment.smoothed.CNA.object$output[which(segment.smoothed.CNA.object$output[,1] == smpl),]
+  d <- list()
+  d$data <- data[,c(1,2,i+2)]
+  d$output <- output
+  
+  save(d, file=paste("cbs/",smpl,".rda",sep=""))
+  
+}
+
+setwd("rae/")
+source("Rae.R")
+```
+
+
+
+Download the expression data from GEO
+
+```{r eval=F}
+url <- "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21034/matrix/"
+destfile <-"GSE21034-GPL10264_series_matrix.txt.gz"
+
+if(!file.exists(destfile)){
+download.file(paste(url,destfile,sep=""),destfile=destfile)
+}
+
+trdata <- getGEO(filename=destfile)
+save(trdata, file="trdata.rda")
+```
+
+
+```{r}
+load("trdata.rda")
+trdata
+```
+
+```{r}
+
+publicData <- read.delim("MSKCC_data/MSKCC_PCa_mRNA_data.txt")
+
+boxplot(log2(exprs(trdata)),outline=F)
+library(org.Hs.eg.db)
+anno <- select(org.Hs.eg.db, cols=c("SYMBOL"),keys = fData(trdata)[,1],keytpes="ACCNUM")
+fData(trdata) <- data.frame(fData(trdata), anno)
+
+
+```
+
+```{r}
+suppInfo <- read.csv("STable1.csv")
+```

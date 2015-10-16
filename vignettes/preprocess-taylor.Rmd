@@ -1,0 +1,332 @@
+```{r eval=FALSE}
+library(GEOquery)
+url <- "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21035/matrix/"
+destfile <-"GSE21035_series_matrix.txt.gz"
+
+if(!file.exists(destfile)){
+download.file(paste(url,destfile,sep=""),destfile=destfile)
+}
+
+cndata <- getGEO(filename=destfile)
+save(cndata, file="cndata.rda")
+
+
+```
+
+```{r}
+load("cndata.rda")
+cndata
+cndata <- cndata[fData(cndata)$CONTROL_TYPE == "FALSE",]
+locs <- strsplit(as.character(fData(cndata)$CHROMOSOMAL_LOCATION),":")
+chr <- unlist(lapply(locs, function(x) x[1]))
+location <- unlist(lapply(locs, function(x) strsplit(x[2], "-", fixed=T)[[1]][1]))
+validChr <- chr %in% paste("chr", c(1:22,"X","Y"),sep="")
+cndata <- cndata[validChr]
+
+
+library(DNAcopy)
+
+CNA.object <- CNA(cbind(exprs(cndata)),chr[validChr],as.numeric(location[validChr]),data.type="logratio",sampleid = gsub("tissue: ", "", pData(cndata)$characteristics_ch1))
+CNA.object[,1] <- gsub("chr", "", CNA.object[,1])
+CNA.object[,1] <- gsub("X", 23, CNA.object[,1])
+CNA.object[,1] <- gsub("Y", 24, CNA.object[,1])
+CNA.object[,1] <- as.numeric(CNA.object[,1])
+
+CNA.object
+
+
+smoothed.CNA.object <- smooth.CNA(CNA.object)
+
+if(!file.exists("segment.smoothed.CNA.object.rda")){
+  
+segment.smoothed.CNA.object <- segment(smoothed.CNA.object, verbose=1)
+segment.smoothed.CNA.object$output[,1] <- gsub("sample.id..","",segment.smoothed.CNA.object$output[,1])
+
+
+save(segment.smoothed.CNA.object, file="segment.smoothed.CNA.object.rda")
+
+} else load("segment.smoothed.CNA.object.rda")
+
+write.table(segment.smoothed.CNA.object$output, file="taylor.seg",sep="\t",quote=F,row.names=F)
+
+
+```
+
+
+
+```{r}
+
+library(GenomicRanges)
+
+library(org.Hs.eg.db)
+library(TxDb.Hsapiens.UCSC.hg18.knownGene)
+tx <- TxDb.Hsapiens.UCSC.hg18.knownGene
+
+regions <- exonsBy(tx, "gene")
+
+
+datadir <- "/home/dunnin01/work/Projects/RStudio/Taylor/"
+
+segfile <- read.delim(paste(datadir,"taylor.seg",sep="/"))
+
+
+segs <- split(segfile, segfile[,1])
+
+
+for(i in 1:length(segs)){
+
+
+  tmp = segs[[i]]
+
+	midBit = summary(tmp[,6])[c(2,5)]
+
+	segSD = sd(tmp[which(tmp[,6] < midBit[2] & tmp[,6] > midBit[1]),6])
+
+	call <- rep(2, nrow(tmp))
+
+	call[which(tmp[,6] < -2.5*segSD)] = 1
+
+	call[which(tmp[,6] < -7*segSD)] = 0
+	
+	call[which(tmp[,6] > 2*segSD)] = 3
+	
+	call[which(tmp[,6] > 6*segSD)] = 4
+
+	tmp = cbind(tmp, call)
+
+	colnames(tmp)[7] = "CopyNumber"
+
+  segs[[i]] <- tmp
+  }	
+
+segfile <- do.call(rbind, segs)
+
+
+allsegs <- with(segfile, GRanges(chrom, IRanges(loc.start,loc.end)))
+mcols(allsegs) <- segfile[,-c(2,3,4)]
+mcols(allsegs)$Severity <- abs(mcols(allsegs)$CopyNumber)
+allsegs <- renameSeqlevels(allsegs, c("1"="chr1", "2" = "chr2", "3" = "chr3", "4" = "chr4", "5" = "chr5", "6" = "chr6", "7" = "chr7", "8" = "chr8", "9" = "chr9" ,"10" = "chr10" ,"11" = "chr11", "12" = "chr12", "13" = "chr13", "14" = "chr14", "15" = "chr15", "16" = "chr16", "17" = "chr17", "18"= "chr18", "19" = "chr19", "20" = "chr20", "21" = "chr21", "22" = "chr22","23" = "chrX","24"="chrY"))
+
+
+
+samples <- split(allsegs, allsegs$ID)
+
+sampleByRegions <- function(mysamp, regions){
+  
+  olaps <- findOverlaps(mysamp, regions)
+  qh <- queryHits(olaps)
+  sh <- subjectHits(olaps)
+  ## segInd will hold the index of the segment that corresponds to each interval in the regions object. e.g. each gene
+  segInd <- rep(NA, length(regions))
+  
+  singleHits <- names(which(table(sh) ==1))
+  segInd[as.numeric(singleHits)] <- qh[match(as.numeric(singleHits), sh)]
+  
+  
+  
+  multiHits <- names(which(table(sh)>1))
+  if(length(multiHits)>0){
+    for(i in 1:length(multiHits)){
+      
+      hits <- qh[which(sh == multiHits[i])]
+      
+      segInd[as.numeric(multiHits[i])] <- hits[which.max(mysamp[hits]$Severity)]
+    }
+  }
+
+CopyNumber <- mysamp$CopyNumber[segInd]
+  
+  CopyNumber
+  
+}
+
+
+cnMat <- matrix(nrow = length(regions), ncol= length(samples))
+colnames(cnMat) <- names(samples)
+rownames(cnMat) <- names(regions)
+
+
+
+for(i in 1:length(samples)){
+  message(i)
+  cnMat[,i] <- sampleByRegions(samples[[i]],regions)
+}
+
+
+##Remove rows with too many NAs??
+
+rowNA <- apply(cnMat, 1, function(x) sum(is.na(x)))
+
+cnMat <- cnMat[-which(rowNA > 100),]
+
+if(!file.exists(paste(datadir, "trdata.rda",sep="/"))){
+
+  url <- "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21034/matrix/"
+  destfile <-"GSE21034-GPL10264_series_matrix.txt.gz"
+  
+  if(!file.exists(destfile)){
+  download.file(paste(url,destfile,sep=""),destfile=destfile)
+  }
+  
+  trdata <- getGEO(filename=destfile)
+
+}
+
+else load(paste(datadir, "trdata.rda",sep="/"))
+
+
+library(org.Hs.eg.db)
+
+entrezid <- unlist(mget(as.character(fData(trdata)[,2]), revmap(org.Hs.egREFSEQ),ifnotfound = NA))
+
+anno <- data.frame(fData(trdata), Entrez = entrezid)
+
+iqrs <- apply(exprs(trdata), 1, IQR,na.rm=TRUE)
+
+                   
+
+prbInd <- NULL 
+
+entrezList <- split(iqrs, anno$Entrez)
+
+for(i in 1:length(entrezList)){
+  
+  tmp <- entrezList[[i]]
+  
+  prbInd[i] <- as.numeric(names(tmp)[which.max(tmp)])
+}
+
+
+
+
+sampleids <- gsub("sample id: ", "", pData(trdata)$characteristics_ch1)
+
+sampleids <- sampleids[strtrim(sampleids, 3) == "PCA"]
+commsamp <- intersect(colnames(cnMat), sampleids)
+
+
+eMat <- log2(exprs(trdata))[prbInd, match(commsamp, sampleids)]
+rownames(eMat) <- names(entrezList)
+
+
+commprobes <- intersect(rownames(cnMat), rownames(eMat))
+
+
+cnMat <- cnMat[match(commprobes, rownames(cnMat)), match(commsamp, colnames(cnMat))]
+eMat <- eMat[match(commprobes, rownames(eMat)),]
+
+rownames(cnMat) <- rownames(eMat) <- unlist(mget(rownames(cnMat), org.Hs.egSYMBOL,ifnotfound=NA))
+
+
+
+```
+
+```{r}
+
+tests <- vector(length=nrow(eMat))
+
+for(i in 1:nrow(eMat)){
+  if(!all(is.na(cnMat[i,]))) tests[i] <- anova(aov(eMat[i,]~cnMat[i,]))$"Pr(>F)"[1]
+   
+}
+names(tests) <- rownames(cnMat)
+tests[which(tests==0)] <- NA
+
+
+
+Features <- order(tests,decreasing=F)
+
+taylor.pdata <- read.csv("/home/dunnin01/work/Projects/RStudio/Taylor/STable1.csv")
+surv_data <- taylor.pdata[taylor.pdata[,2] == "PRIMARY",]
+surv_object = Surv(time=surv_data$BCR_FreeTime, event= surv_data$BCR_Event=="BCR_Algorithm")
+
+group_labels <- paste(surv_data$PathGG1, surv_data$PathGG2,sep="+")
+cols <- levels(as.factor(group_labels))
+
+class <- levels(as.factor(as.character(group_labels)))
+levels(class) <- brewer.pal(n=length(class),"Set1")
+
+
+surv_diff = survdiff(surv_object~group_labels)
+surv_fit = survfit(surv_object~group_labels)
+
+x=plot(surv_fit,conf.int=FALSE,xlab="Time (months)", ylab="Prob of freedom from BCR",col=levels(class))
+legend("bottomright", legend=levels(as.factor(group_labels)),fill=levels(class))
+
+
+test <- survdiff(surv_object~as.character(group_labels))
+
+test <- pchisq(test$chisq, df = length(test$n)-1, lower.tail=FALSE)
+text(60,0, paste("Logrank p = ", format(test, type="s", digits=2), sep=""),cex=1.4)
+p1 <- table(as.character(group[!is.na(meta$BCR)]))
+p2 <- tapply(meta$BCR ,as.character(group), sum, na.rm=TRUE)
+text.leg <- paste(levels(as.factor(as.character(group))) , ": ", p1, "(", p2, ")", sep="")
+legend("bottomleft",  col=as.character(levels(class)), legend=text.leg, cex=1.3)
+
+legend("topright",fill = as.character(levels(class)), legend=class)
+
+datasets <- NULL
+datasets[[1]] <- t(cnMat[Features,])
+datasets[[2]] <- t(eMat[Features,])
+datasets[[3]] <- tests[Features]
+
+colnames(datasets[[1]]) <- paste("CN", colnames(datasets[[1]]),sep="-")
+colnames(datasets[[2]]) <- paste("EXP", colnames(datasets[[2]]),sep="-")
+
+save(datasets, file="taylor.features.rda")
+
+pd <- pData(trdata)
+
+type <- taylor.pdata[match(commsamp,taylor.pdata[,1]),2]
+
+sampleids.noMet <- sampleids[type == "PRIMARY"]
+
+
+eMat <- eMat[, match(sampleids.noMet, commsamp)]
+cnMat <- cnMat[,match(sampleids.noMet, colnames(cnMat))]
+
+
+
+
+tests <- vector(length=nrow(eMat))
+
+for(i in 1:nrow(eMat)){
+  if(!all(is.na(cnMat[i,]))) tests[i] <- anova(aov(eMat[i,]~cnMat[i,]))$"Pr(>F)"[1]
+   
+}
+names(tests) <- rownames(cnMat)
+tests[which(tests==0)] <- NA
+
+
+datasets <- NULL
+datasets[[1]] <- t(cnMat[Features,])
+datasets[[2]] <- t(eMat[Features,])
+datasets[[3]] <- tests[Features]
+
+colnames(datasets[[1]]) <- paste("CN", colnames(datasets[[1]]),sep="-")
+colnames(datasets[[2]]) <- paste("EXP", colnames(datasets[[2]]),sep="-")
+
+save(datasets, file="taylor.features.noMets.rda")
+
+
+Features <- order(tests,decreasing=F)
+
+
+library(reshape)
+N=10
+
+
+Expression <- melt(t(datasets[[2]])[1:N,])
+colnames(Expression)[3] <- "Expression"
+CopyNumber <- melt(t(datasets[[1]])[1:N,])
+colnames(CopyNumber)[3] <- "CopyNumber"
+
+df <- data.frame(Expression, CopyNumber)
+
+ggplot(df, aes(x = CopyNumber, y  =Expression)) + geom_point() + facet_wrap(~X1,scales="free_x")
+
+
+```
+
+
+
