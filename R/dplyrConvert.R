@@ -10,19 +10,19 @@ dplyrConvert <- function(){
   zscore <- function(x) t(scale(t(x)))
   
   iqrs <- apply(log2(exprs(geoData)), 1, IQR,na.rm=TRUE)
+  mu <-   apply(log2(exprs(geoData)), 1, mean,na.rm=TRUE)
+  sd <- apply(log2(exprs(geoData)), 1, sd,na.rm=TRUE)
   
-  taylor <- tbl_df(data.frame(Probe=featureNames(geoData),IQR=iqrs,log2(exprs(geoData)))) %>%
-    gather(geo_accession,Expression,- c(Probe,IQR))
+  taylor <- tbl_df(data.frame(Probe=featureNames(geoData),IQR=iqrs,mu,sd,log2(exprs(geoData)))) %>%
+    gather(geo_accession,Expression,- c(Probe,IQR,mu,sd))
   
-  taylor.z <- tbl_df(data.frame(Probe=featureNames(geoData),zscore(log2(exprs(geoData))))) %>%
-    gather(geo_accession,Z,- Probe)
-  
+
   fd <- tbl_df(fData(geoData)) %>% rename(Probe = ID)
   
   pd <- tbl_df(pData(geoData))
   
 
-  taylor <- taylor %>% full_join(pd) %>% full_join(fd) %>% full_join(taylor.z)
+  taylor <- taylor %>% full_join(pd) %>% full_join(fd)
 
   ##selecting most variable probe for each gene
 
