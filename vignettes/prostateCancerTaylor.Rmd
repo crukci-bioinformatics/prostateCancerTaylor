@@ -69,7 +69,7 @@ pd2$Gleason <- paste(pd2$PathGG1,pd2$PathGG2,sep="+")
 pd2$Gleason[is.na(pd2$PathGG1) | is.na(pd2$PathGG2)] <- NA
 pData(geoData) <- pd2[,c("Sample","geo_accession","Sample_Group","Gleason","Stage","Path_Stage","Type","Copy.number.Cluster","Time","Event")]
 taylor <- geoData
-save(taylor, file="../data/taylor.rda")
+save(taylor, file="data/taylor.rda",compress = "xz")
 
 ```
 

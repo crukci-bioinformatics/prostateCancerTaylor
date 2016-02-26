@@ -9,5 +9,6 @@ Description: A Bioconductor data package for the Varambally dataset
 License: GPL 2.0
 LazyData: TRUE
 VignetteBuilder: knitr
-Depends: Biobase
+Depends: Biobase, R (>= 2.10) 
 Suggests: BiocStyle, knitr, GEOquery, dplyr, org.Hs.eg.db
+biocViews: GEO, MicroarrayData
