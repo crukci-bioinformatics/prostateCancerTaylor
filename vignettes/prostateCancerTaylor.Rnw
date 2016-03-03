@@ -10,7 +10,7 @@
 
 In this document, I describe how the GEO data entry for the Tayllor Prostate Cancer data was processed and saved into an object for analysis in Bioconductor. First of all load the relevant libraries for grabbing and manipulaing the data
 
-<<>>=
+<<eval=FALSE>>=
 library(GEOquery)
 library(dplyr)
 library(tidyr)
@@ -20,7 +20,7 @@ library(org.Hs.eg.db)
 
 Now use the `getGEO` function with the correct ID
 
-<<>>=
+<<eval=FALSE>>=
 
   url <- "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21034/matrix/"
   destfile <-"GSE21034-GPL10264_series_matrix.txt.gz"
@@ -35,7 +35,7 @@ geoData <- getGEO(filename=destfile)
 
 The feature data only has Entrez ID and Gene Bank Accession, whereas we want to use the more-common gene name in some analyses. We discard anything without a Entrez ID
 
-<<>>=
+<<eval=FALSE>>=
 library(org.Hs.eg.db)
 entrezid <- unlist(mget(as.character(fData(geoData)[,2]), revmap(org.Hs.egREFSEQ),ifnotfound = NA))
 
@@ -46,7 +46,7 @@ fData(geoData) <- data.frame(anno, Gene=unlist(mget(as.character(anno$Entrez), o
 
 We tidy up the data from GEO; creating a new data frame of just the clinical characteristics of interest.
 
-<<>>=
+<<eval=FALSE>>=
 pd <- pData(geoData)
 
 pd2 <- data.frame("geo_accession" = pd$geo_accession, Sample = gsub("sample id: ", "", pd$characteristics_ch1), Sample_Group = gsub("disease status: ","", pd$characteristics_ch1.2), Gleason=gsub("biopsy_gleason_grade: ", "", pd$characteristics_ch1.4),Stage = gsub("clint_stage: ", "", pd$characteristics_ch1.5),Path_Stage = gsub("pathological_stage: ","",pd$characteristics_ch1.6))
@@ -56,7 +56,7 @@ rownames(pd2) <- pd2$geo_accession
 
 Extra information, particulary that relating to survival, can be found in the supplmentary table for the paper. For convenience, we save this table as a csv file in the package.
 
-<<>>=
+<<eval=FALSE>>=
 fpath <- system.file("extdata", "STable1.csv",package="prostateCancerTaylor")
 extraClin <- read.csv(fpath)
 
