@@ -5,10 +5,9 @@ Version: 0.0.99
 Date: 2015-09-10
 Author: Mark Dunning
 Maintainer: Mark Dunning <mark.dunning@cruk.cam.ac.uk>
-Description: A Bioconductor data package for the Varambally dataset
+Description: A Bioconductor data package for the Taylor et al (2010) dataset. 
 License: GPL 2.0
 LazyData: TRUE
-VignetteBuilder: knitr
 Depends: Biobase, R (>= 2.10) 
-Suggests: BiocStyle, knitr, GEOquery, dplyr, org.Hs.eg.db
-biocViews: GEO, MicroarrayData
+Suggests: GEOquery, dplyr, org.Hs.eg.db,tidyr
+biocViews: ExperimentData, ExpressionData,GEO, MicroarrayData, CancerData, ProstateCancerData

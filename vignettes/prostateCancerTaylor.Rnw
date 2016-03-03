@@ -1,0 +1,75 @@
+%\VignetteKeywords{Database}
+%\VignetteDepends{prostateCancerGrasso}
+%\VignettePackage{prostateCancerGrasso}
+%\VignetteIndexEntry{prostateCancerGrasso}
+
+\documentclass{article}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+In this document, I describe how the GEO data entry for the Tayllor Prostate Cancer data was processed and saved into an object for analysis in Bioconductor. First of all load the relevant libraries for grabbing and manipulaing the data
+
+<<>>=
+library(GEOquery)
+library(dplyr)
+library(tidyr)
+library(org.Hs.eg.db)
+@
+
+
+Now use the `getGEO` function with the correct ID
+
+<<>>=
+
+  url <- "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21034/matrix/"
+  destfile <-"GSE21034-GPL10264_series_matrix.txt.gz"
+  
+  if(!file.exists(destfile)){
+  download.file(paste(url,destfile,sep=""),destfile=destfile)
+  }
+  
+geoData <- getGEO(filename=destfile)
+@
+
+
+The feature data only has Entrez ID and Gene Bank Accession, whereas we want to use the more-common gene name in some analyses. We discard anything without a Entrez ID
+
+<<>>=
+library(org.Hs.eg.db)
+entrezid <- unlist(mget(as.character(fData(geoData)[,2]), revmap(org.Hs.egREFSEQ),ifnotfound = NA))
+
+anno <- data.frame(fData(geoData), Entrez = entrezid)
+anno <- anno[!is.na(anno$Entrez),]
+fData(geoData) <- data.frame(anno, Gene=unlist(mget(as.character(anno$Entrez), org.Hs.egSYMBOL,ifnotfound=NA)))
+@
+
+We tidy up the data from GEO; creating a new data frame of just the clinical characteristics of interest.
+
+<<>>=
+pd <- pData(geoData)
+
+pd2 <- data.frame("geo_accession" = pd$geo_accession, Sample = gsub("sample id: ", "", pd$characteristics_ch1), Sample_Group = gsub("disease status: ","", pd$characteristics_ch1.2), Gleason=gsub("biopsy_gleason_grade: ", "", pd$characteristics_ch1.4),Stage = gsub("clint_stage: ", "", pd$characteristics_ch1.5),Path_Stage = gsub("pathological_stage: ","",pd$characteristics_ch1.6))
+
+rownames(pd2) <- pd2$geo_accession
+@
+
+Extra information, particulary that relating to survival, can be found in the supplmentary table for the paper. For convenience, we save this table as a csv file in the package.
+
+<<>>=
+fpath <- system.file("extdata", "STable1.csv",package="prostateCancerTaylor")
+extraClin <- read.csv(fpath)
+
+pd2 <- merge(pd2, extraClin, by.x=2,by.y=1,all.x=TRUE,sort=FALSE)
+pd2$Time <- pd2$BCR_FreeTime
+pd2$Event <- pd2$BCR_Event == "BCR_Algorithm"
+pd2$Gleason <- paste(pd2$PathGG1,pd2$PathGG2,sep="+")
+pd2$Gleason[is.na(pd2$PathGG1) | is.na(pd2$PathGG2)] <- NA
+pData(geoData) <- pd2[,c("Sample","geo_accession","Sample_Group","Gleason","Stage","Path_Stage","Type","Copy.number.Cluster","Time","Event")]
+taylor <- geoData
+save(taylor, file="data/taylor.rda",compress = "xz")
+@
+
+
+
+\end{document}
