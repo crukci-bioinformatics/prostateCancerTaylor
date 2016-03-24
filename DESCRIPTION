@@ -9,5 +9,5 @@ Description: A Bioconductor data package for the Taylor et al (2010) dataset.
 License: Artistic-2.0
 LazyData: TRUE
 Depends: Biobase, R (>= 3.3) 
-Suggests: GEOquery, org.Hs.eg.db
+Suggests: GEOquery, org.Hs.eg.db, gdata
 biocViews: ExperimentData, ExpressionData,GEO, MicroarrayData, CancerData, ProstateCancerData

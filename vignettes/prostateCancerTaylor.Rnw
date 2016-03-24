@@ -79,13 +79,28 @@ pd2$Time <- pd2$BCR_FreeTime
 pd2$Event <- pd2$BCR_Event == "BCR_Algorithm"
 pd2$Gleason <- paste(pd2$PathGG1,pd2$PathGG2,sep="+")
 pd2$Gleason[is.na(pd2$PathGG1) | is.na(pd2$PathGG2)] <- NA
+
+@
+
+Updated clinical information was published in Hieronymus et al. Copy number alteration burden predicts prostate cancer relapse (2014)
+
+<<>>=
+library(gdata)
+fpath <- system.file("extdata", "pnas.1411446111.sd02.xls",package="prostateCancerTaylor")
+updateClin <- read.xls(fpath)
+updateClin <- updateClin[,c("sample.id","CNA..percentage..percent.of..genome.that.is.copy.number.altered.by.length.","Updated_BCR.time_Months","Updated_BCR.event","Updated_MetsFreeTime_Months","Updated_MetsEvent","Updated_Survival_or_Followup_Time_Months","Updated_survivalEvent")]
+
+pd2 <- merge(pd2, updateClin)
+@
+
+
+<<>>=
 pData(geoData) <- pd2[,c("Sample","geo_accession",
 "Sample_Group","Gleason","Stage","Path_Stage",
-"Type","Copy.number.Cluster","Time","Event")]
+"Type","Copy.number.Cluster","Time","Event","CNA..percentage..percent.of..genome.that.is.copy.number.altered.by.length.","Updated_BCR.time_Months","Updated_BCR.event","Updated_MetsFreeTime_Months","Updated_MetsEvent","Updated_Survival_or_Followup_Time_Months","Updated_survivalEvent")]
 taylor <- geoData
 save(taylor, file="data/taylor.rda",compress = "xz")
 @
-
 
 
 \end{document}
